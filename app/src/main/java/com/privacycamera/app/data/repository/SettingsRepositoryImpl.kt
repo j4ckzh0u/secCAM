@@ -43,8 +43,7 @@ class SettingsRepositoryImpl @Inject constructor(
     }
 
     override suspend fun verifyPassword(password: String): Boolean {
-        val settings = settingsDao.getSettings()
-        return true
+        return passwordManager.verifyPassword(password)
     }
 
     override suspend fun isPasswordSet(): Boolean {
