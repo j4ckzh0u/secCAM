@@ -174,6 +174,36 @@ fun CameraScreen(
                 }
             )
         }
+
+        if (uiState.showPhotoProcessed) {
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissPhotoProcessed() },
+                title = { Text("照片已保存") },
+                text = {
+                    Text("照片已成功保存，未检测到敏感信息。")
+                },
+                confirmButton = {
+                    Button(onClick = { viewModel.dismissPhotoProcessed() }) {
+                        Text("确定")
+                    }
+                }
+            )
+        }
+
+        uiState.error?.let { errorMessage ->
+            AlertDialog(
+                onDismissRequest = { viewModel.clearError() },
+                title = { Text("错误") },
+                text = {
+                    Text(errorMessage)
+                },
+                confirmButton = {
+                    Button(onClick = { viewModel.clearError() }) {
+                        Text("确定")
+                    }
+                }
+            )
+        }
     }
 }
 

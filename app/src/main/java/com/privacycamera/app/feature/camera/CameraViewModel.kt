@@ -29,7 +29,8 @@ data class CameraUiState(
     val hasGpsInfo: Boolean = false,
     val error: String? = null,
     val showSensitiveDialog: Boolean = false,
-    val isProcessing: Boolean = false
+    val isProcessing: Boolean = false,
+    val showPhotoProcessed: Boolean = false
 )
 
 @HiltViewModel
@@ -63,18 +64,48 @@ class CameraViewModel @Inject constructor(
 
     fun onPhotoCaptured(uri: Uri) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isProcessing = true) }
+            _uiState.update { it.copy(isProcessing = true, error = null) }
             try {
-                val file = File(uri.path ?: return@launch)
+                val filePath = uri.path
+                if (filePath.isNullOrEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            error = "照片保存失败",
+                            isProcessing = false
+                        )
+                    }
+                    return@launch
+                }
+                
+                val file = File(filePath)
+                if (!file.exists()) {
+                    _uiState.update {
+                        it.copy(
+                            error = "照片文件不存在",
+                            isProcessing = false
+                        )
+                    }
+                    return@launch
+                }
+
                 val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                    ?: return@launch
+                if (bitmap == null) {
+                    _uiState.update {
+                        it.copy(
+                            error = "无法读取照片",
+                            isProcessing = false
+                        )
+                    }
+                    return@launch
+                }
 
                 val sensitiveList = mutableListOf<SensitiveInfo>()
+                var hasGps = false
 
                 val gpsInfo = sensitiveInfoDetector.detectGpsFromFile(file)
                 if (gpsInfo != null) {
                     sensitiveList.add(gpsInfo)
-                    _uiState.update { it.copy(hasGpsInfo = true) }
+                    hasGps = true
                 }
 
                 val textSensitive = sensitiveInfoDetector.detectSensitiveInfo(bitmap)
@@ -85,8 +116,10 @@ class CameraViewModel @Inject constructor(
                         capturedPhotoUri = uri,
                         capturedPhotoBitmap = bitmap,
                         detectedSensitiveInfo = sensitiveList,
+                        hasGpsInfo = hasGps,
                         isProcessing = false,
-                        showSensitiveDialog = sensitiveList.isNotEmpty()
+                        showSensitiveDialog = sensitiveList.isNotEmpty(),
+                        showPhotoProcessed = sensitiveList.isEmpty()
                     )
                 }
             } catch (e: Exception) {
@@ -102,6 +135,10 @@ class CameraViewModel @Inject constructor(
 
     fun dismissSensitiveDialog() {
         _uiState.update { it.copy(showSensitiveDialog = false) }
+    }
+
+    fun dismissPhotoProcessed() {
+        _uiState.update { it.copy(showPhotoProcessed = false, capturedPhotoUri = null, capturedPhotoBitmap = null) }
     }
 
     fun clearError() {
