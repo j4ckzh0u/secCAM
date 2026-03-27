@@ -23,7 +23,11 @@ import androidx.navigation.compose.rememberNavController
 import com.privacycamera.app.feature.album.AlbumScreen
 import com.privacycamera.app.feature.album.PrivacyAlbumScreen
 import com.privacycamera.app.feature.camera.CameraScreen
+import com.privacycamera.app.feature.processing.ProcessingScreen
 import com.privacycamera.app.feature.settings.SettingsScreen
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector?) {
     data object Camera : Screen("camera", "相机", Icons.Default.CameraAlt)
@@ -91,7 +95,8 @@ fun PrivacyCameraNavHost() {
                         }
                     },
                     onPhotoCaptured = { uri ->
-                        navController.navigate("processing/${uri}")
+                        val encodedUri = URLEncoder.encode(uri, StandardCharsets.UTF_8.toString())
+                        navController.navigate("processing/$encodedUri")
                     }
                 )
             }
@@ -103,6 +108,16 @@ fun PrivacyCameraNavHost() {
             }
             composable(Screen.Settings.route) {
                 SettingsScreen()
+            }
+            composable("processing/{photoUri}") { backStackEntry ->
+                val encodedUri = backStackEntry.arguments?.getString("photoUri") ?: ""
+                val photoUri = URLDecoder.decode(encodedUri, StandardCharsets.UTF_8.toString())
+                ProcessingScreen(
+                    photoUri = photoUri,
+                    onNavigateBack = {
+                        navController.popBackStack()
+                    }
+                )
             }
         }
     }
