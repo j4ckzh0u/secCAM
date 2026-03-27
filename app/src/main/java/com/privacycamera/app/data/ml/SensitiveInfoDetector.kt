@@ -15,18 +15,16 @@ class SensitiveInfoDetector @Inject constructor(
 
     companion object {
         private val ID_CARD_REGEX = Regex(
-            "\\b[1-9]\\d{5}(?:19|20)\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]\\b"
+            "[1-9]\\d{5}(?:19|20)\\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]"
         )
 
-        private val BANK_CARD_REGEX = Regex("\\b\\d{16,19}\\b")
+        private val PHONE_REGEX = Regex("1[3-9]\\d{9}")
 
-        private val PHONE_REGEX = Regex("\\b1[3-9]\\d{9}\\b")
+        private val EMAIL_REGEX = Regex("[\\w.-]+@[\\w.-]+\\.\\w+")
 
-        private val EMAIL_REGEX = Regex("\\b[\\w.-]+@[\\w.-]+\\.\\w+\\b")
+        private val ADDRESS_KEYWORDS = listOf("省", "市", "区", "县", "路", "街", "号", "栋", "楼", "室", "街道", "社区")
 
-        private val ADDRESS_KEYWORDS = listOf("省", "市", "区", "县", "路", "街", "号", "栋", "楼", "室")
-
-        private val PASSWORD_PATTERN = Regex("(?i)(password|pwd|密码|pass|口令)[:=]?\\s*(\\S+)")
+        private val PASSWORD_KEYWORDS = listOf("password", "pwd", "密码", "pass", "口令", "secret")
     }
 
     suspend fun detectSensitiveInfo(bitmap: Bitmap): List<SensitiveInfo> {
@@ -50,36 +48,76 @@ class SensitiveInfoDetector @Inject constructor(
         return result
     }
 
-    private fun classifyText(text: String): SensitiveType? {
-        return when {
-            ID_CARD_REGEX.containsMatchIn(text) -> SensitiveType.ID_CARD
-            BANK_CARD_REGEX.containsMatchIn(text) && isValidBankCard(text) -> SensitiveType.BANK_CARD
-            PHONE_REGEX.containsMatchIn(text) -> SensitiveType.PHONE_NUMBER
-            EMAIL_REGEX.containsMatchIn(text) -> SensitiveType.EMAIL
-            PASSWORD_PATTERN.containsMatchIn(text) -> SensitiveType.PASSWORD
-            isPotentialAddress(text) -> SensitiveType.ADDRESS
-            else -> null
+    suspend fun detectSensitiveInfoFromFile(file: java.io.File): List<SensitiveInfo> {
+        val result = mutableListOf<SensitiveInfo>()
+
+        try {
+            val textResults = textRecognitionEngine.recognizeTextFromFile(file)
+            for (textResult in textResults) {
+                val sensitiveType = classifyText(textResult.text)
+                if (sensitiveType != null) {
+                    result.add(
+                        SensitiveInfo(
+                            type = sensitiveType,
+                            boundingBox = textResult.boundingBox,
+                            content = textResult.text,
+                            confidence = textResult.confidence
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
+
+        return result
     }
 
-    private fun isValidBankCard(cardNumber: String): Boolean {
-        val digitsOnly = cardNumber.replace("\\s".toRegex(), "")
-        if (!digitsOnly.matches("\\d{16,19}".toRegex())) return false
-        return luhnCheck(digitsOnly)
+    private fun classifyText(text: String): SensitiveType? {
+        val cleanText = text.replace("\\s+".toRegex(), " ").trim()
+
+        if (ID_CARD_REGEX.containsMatchIn(cleanText)) {
+            return SensitiveType.ID_CARD
+        }
+
+        val digitsOnly = cleanText.replace("[^0-9]".toRegex(), "")
+        if (digitsOnly.length in 16..19 && luhnCheck(digitsOnly)) {
+            return SensitiveType.BANK_CARD
+        }
+
+        if (PHONE_REGEX.containsMatchIn(cleanText)) {
+            return SensitiveType.PHONE_NUMBER
+        }
+
+        if (EMAIL_REGEX.containsMatchIn(cleanText)) {
+            return SensitiveType.EMAIL
+        }
+
+        for (keyword in PASSWORD_KEYWORDS) {
+            if (cleanText.contains(keyword, ignoreCase = true)) {
+                return SensitiveType.PASSWORD
+            }
+        }
+
+        if (isPotentialAddress(cleanText)) {
+            return SensitiveType.ADDRESS
+        }
+
+        return null
     }
 
     private fun luhnCheck(cardNumber: String): Boolean {
+        if (cardNumber.length < 13 || cardNumber.length > 19) return false
         var sum = 0
         var alternate = false
         for (i in cardNumber.length - 1 downTo 0) {
-            var digit = cardNumber[i].digitToInt()
+            val digit = cardNumber[i].digitToIntOrNull() ?: return false
             if (alternate) {
-                digit *= 2
-                if (digit > 9) {
-                    digit = (digit % 10) + 1
-                }
+                val doubled = digit * 2
+                sum += if (doubled > 9) doubled - 9 else doubled
+            } else {
+                sum += digit
             }
-            sum += digit
             alternate = !alternate
         }
         return sum % 10 == 0

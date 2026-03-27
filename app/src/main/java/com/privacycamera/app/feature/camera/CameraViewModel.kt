@@ -88,17 +88,6 @@ class CameraViewModel @Inject constructor(
                     return@launch
                 }
 
-                val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                if (bitmap == null) {
-                    _uiState.update {
-                        it.copy(
-                            error = "无法读取照片",
-                            isProcessing = false
-                        )
-                    }
-                    return@launch
-                }
-
                 val sensitiveList = mutableListOf<SensitiveInfo>()
                 var hasGps = false
 
@@ -108,15 +97,14 @@ class CameraViewModel @Inject constructor(
                     hasGps = true
                 }
 
-                val textSensitive = sensitiveInfoDetector.detectSensitiveInfo(bitmap)
+                val textSensitive = sensitiveInfoDetector.detectSensitiveInfoFromFile(file)
                 sensitiveList.addAll(textSensitive)
 
                 _uiState.update {
                     it.copy(
                         capturedPhotoUri = uri,
-                        capturedPhotoBitmap = bitmap,
-                        detectedSensitiveInfo = sensitiveList,
                         hasGpsInfo = hasGps,
+                        detectedSensitiveInfo = sensitiveList,
                         isProcessing = false,
                         showSensitiveDialog = sensitiveList.isNotEmpty(),
                         showPhotoProcessed = sensitiveList.isEmpty()
